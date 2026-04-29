@@ -1,0 +1,28 @@
+apiVersion: apps/v1          # The API group that handles Deployments
+kind: Deployment             # What we're creating
+metadata:
+  name: static-website       # Name of this Deployment
+  labels:
+    app: static-website      # Label on the Deployment itself
+spec:
+  replicas: 3                # Keep 3 Pods running at all times
+  selector:
+    matchLabels:
+      app: static-website    # Manage Pods that have THIS label
+  template:                  # Blueprint for each Pod
+    metadata:
+      labels:
+        app: static-website  # This MUST match selector.matchLabels
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25    # Pin a version — never use 'latest' in real projects
+        ports:
+        - containerPort: 80
+        resources:           # Best practice: always set resource limits
+          requests:
+            memory: "64Mi"
+            cpu: "100m"      # 100 millicores = 0.1 CPU
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
