@@ -18,8 +18,8 @@ curl http://localhost:8080
 
 
 ## Concepts Covered
-Deployments and ReplicaSets
-NodePort Services
-Label selectors
-Self-healing
-Rolling updates
+- Deployments and ReplicaSets
+- NodePort Services
+- Label selectors
+- Self-healing
+- Rolling updates
