@@ -261,8 +261,6 @@ curl http://localhost:8080
 - Label selectors
 - Self-healing
 - Rolling updates
-EOF
-```
 
 ### 4.5 Verify all files exist
 
