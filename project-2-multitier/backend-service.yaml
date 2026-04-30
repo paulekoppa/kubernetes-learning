@@ -1,0 +1,35 @@
+# ============================================================
+# BACKEND CLUSTERIP SERVICE
+# Provides a stable internal DNS name and IP for the backend
+# Only accessible from WITHIN the cluster (not from outside)
+# ============================================================
+
+apiVersion: v1       # Core API version — Services use v1
+kind: Service        # We want a Service object
+metadata:
+  name: backend      # ← THIS becomes the DNS name inside the cluster
+                     #   Other pods call: http://backend:5000
+                     #   Full DNS:        http://backend.project-2.svc.cluster.local:5000
+  namespace: project-2   # Must be in the same namespace as the pods it targets
+  labels:
+    app: backend         # Identifies this service as belonging to the backend
+    project: multitier   # Groups it under our multitier project
+    tier: backend        # Marks it as the backend tier
+
+spec:
+  type: ClusterIP    # ← KEY CONCEPT: Internal-only service
+                     #   Compare to NodePort (external access) from Project 1
+                     #   ClusterIP = pod-to-pod communication only
+
+  selector:
+    app: backend     # ← THE GLUE: Routes traffic to any pod with label app=backend
+                     #   This is how the service FINDS its pods dynamically
+                     #   If a pod dies and restarts, the new pod is found automatically
+
+  ports:
+  - name: http           # Descriptive name for this port mapping
+    port: 5000           # Port that OTHER pods use to call this service
+                         # e.g., http://backend:5000  ← this 5000
+    targetPort: 5000     # Port on the actual POD to forward traffic to
+                         # Must match containerPort in the Deployment
+    protocol: TCP        # TCP is standard for HTTP traffic
