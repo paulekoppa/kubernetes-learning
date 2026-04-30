@@ -1,0 +1,78 @@
+# ============================================================
+# BACKEND DEPLOYMENT
+# Manages the pods running our Node.js API server
+# Namespace: project-2 (isolated from other projects)
+# ============================================================
+
+apiVersion: apps/v1        # API version that supports Deployments
+kind: Deployment           # We want a Deployment (manages ReplicaSets + Pods)
+metadata:
+  name: backend            # Name of this Deployment object
+  namespace: project-2     # Lives in our dedicated project-2 namespace
+  labels:
+    app: backend           # Identifies this resource as the backend app
+    project: multitier     # Groups it under our multitier project
+    tier: backend          # Marks it as the backend tier (vs frontend)
+
+spec:
+  replicas: 2              # Run 2 identical backend pods for availability
+
+  selector:
+    matchLabels:
+      app: backend         # This Deployment manages pods with label app=backend
+
+  template:                # Pod template — defines what each pod looks like
+    metadata:
+      labels:
+        app: backend       # MUST match selector.matchLabels above
+        tier: backend      # Extra label for filtering/observability
+
+    spec:
+      containers:
+      - name: api                  # Name of the container inside the pod
+        image: node:18-alpine      # Lightweight Node.js 18 image (Alpine Linux)
+
+        # We use a shell command to write + run a JS file inline
+        # This avoids needing a custom Docker image for learning purposes
+        command:
+          - sh
+          - -c
+          - |
+            # Write the Node.js server code to a file called server.js
+            cat > server.js << 'JSEOF'
+            const http = require('http');  // Built-in Node.js HTTP module
+            const port = 5000;            // Port our API will listen on
+
+            const server = http.createServer((req, res) => {
+              res.statusCode = 200;                              // HTTP 200 OK
+              res.setHeader('Content-Type', 'application/json'); // Return JSON
+              res.setHeader('Access-Control-Allow-Origin', '*'); // Allow frontend to call us (CORS)
+              res.end(JSON.stringify({
+                message: 'Hello from the Backend API!',  // Static message
+                pod: process.env.HOSTNAME,               // Pod name (set automatically by K8s)
+                timestamp: new Date().toISOString()      // Current time
+              }));
+            });
+
+            // Start listening on all network interfaces (0.0.0.0)
+            // so Kubernetes can route traffic to this pod from any node
+            server.listen(port, '0.0.0.0', () => {
+              console.log('Backend API running on port ' + port);
+            });
+            JSEOF
+
+            # Execute the server file we just wrote
+            node server.js
+
+        ports:
+        - containerPort: 5000    # The port this container exposes (must match server.js)
+          name: http             # Named port — makes it easier to reference in services
+
+        # Resource management — same concept as Project 1
+        resources:
+          requests:
+            memory: "64Mi"   # Minimum memory Kubernetes reserves for this pod
+            cpu: "100m"      # Minimum CPU (100 millicores = 0.1 vCPU)
+          limits:
+            memory: "128Mi"  # Maximum memory — pod is killed if it exceeds this
+            cpu: "200m"      # Maximum CPU — pod is throttled if it exceeds this
