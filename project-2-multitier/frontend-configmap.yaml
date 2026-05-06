@@ -1,16 +1,22 @@
 # ============================================================
-# FRONTEND CONFIGMAP
+# FRONTEND CONFIGMAP (updated)
 # Stores two files that nginx needs:
-#   1. index.html  - the webpage the browser sees
-#   2. nginx.conf  - nginx behavior + proxy rules
-# Keeping config here means no Docker rebuild on changes
+#   1. index.html  - updated to display all backend fields:
+#                    message, environment, version, pod, timestamp
+#   2. nginx.conf  - unchanged, still proxies /api to backend
+#
+# HOW UPDATES WORK:
+#   1. Edit this ConfigMap
+#   2. kubectl apply → updates stored data in Kubernetes
+#   3. kubectl rollout restart → pods pick up new content
+#   No Docker image rebuild needed!
 # ============================================================
 
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: frontend-config       # Referenced by the Deployment to mount these files
-  namespace: project-2        # Must be in same namespace as the pods that use it
+  name: frontend-config        # Referenced by frontend-deployment.yaml volumes
+  namespace: project-2         # Must match the namespace of pods that use it
   labels:
     app: frontend
     project: multitier
@@ -18,9 +24,11 @@ metadata:
 
 data:
   # ─────────────────────────────────────────────────────────
-  # KEY 1: index.html
+  # KEY 1: index.html (updated)
   # This is the webpage your browser loads
-  # The JavaScript inside calls /api (our nginx proxy path)
+  # JavaScript calls /api → nginx proxies to backend
+  # Now displays ALL fields returned by the backend API:
+  #   message, environment, version, pod, timestamp
   # ─────────────────────────────────────────────────────────
   index.html: |
     <!DOCTYPE html>
@@ -30,29 +38,58 @@ data:
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Kubernetes Multi-Tier App</title>
       <style>
-        /* Simple clean styling */
+        /* ── PAGE LAYOUT ────────────────────────────────── */
         body {
           font-family: Arial, sans-serif;
           max-width: 800px;
-          margin: 50px auto;
+          margin: 50px auto;        /* Center the content horizontally */
           padding: 20px;
           background-color: #f0f4f8;
         }
         h1 { color: #2c3e50; }
 
-        /* The card that displays the API response */
+        /* ── RESPONSE CARD ──────────────────────────────── */
+        /* White card that displays the API response */
         .response-box {
           background: white;
           border-radius: 8px;
           padding: 20px;
           margin-top: 20px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);  /* Subtle shadow */
         }
 
-        /* Color-coded status indicators */
-        .status-ok  { color: #27ae60; font-weight: bold; }  /* green = success */
-        .status-err { color: #e74c3c; font-weight: bold; }  /* red   = error   */
+        /* ── ENVIRONMENT BADGE ──────────────────────────── */
+        /* Pill-shaped badge showing the current environment */
+        /* Color changes dynamically based on environment value */
+        .env-badge {
+          display: inline-block;
+          padding: 3px 10px;
+          border-radius: 12px;        /* Rounded pill shape */
+          font-size: 12px;
+          font-weight: bold;
+          text-transform: uppercase;  /* Always show in capitals */
+          margin-left: 8px;
+        }
+        /* Each environment gets its own color for quick visual identification */
+        .env-development { background-color: #f39c12; color: white; }  /* Orange  = dev  */
+        .env-staging     { background-color: #8e44ad; color: white; }  /* Purple  = staging */
+        .env-production  { background-color: #27ae60; color: white; }  /* Green   = prod */
 
+        /* ── STATUS INDICATORS ──────────────────────────── */
+        .status-ok  { color: #27ae60; font-weight: bold; }  /* Green = success */
+        .status-err { color: #e74c3c; font-weight: bold; }  /* Red   = error   */
+
+        /* ── FIELD ROWS ─────────────────────────────────── */
+        /* Each API response field displayed as a separated row */
+        .field-row {
+          padding: 6px 0;
+          border-bottom: 1px solid #ecf0f1;  /* Light divider between fields */
+        }
+        .field-row:last-child { border-bottom: none; }       /* No divider on last row */
+        .field-label { color: #7f8c8d; font-size: 13px; }   /* Grey label */
+        .field-value { font-weight: bold; color: #2c3e50; }  /* Dark bold value */
+
+        /* ── BUTTON ─────────────────────────────────────── */
         button {
           background-color: #3498db;
           color: white;
@@ -63,7 +100,7 @@ data:
           font-size: 16px;
           margin-top: 10px;
         }
-        button:hover { background-color: #2980b9; }
+        button:hover { background-color: #2980b9; }  /* Darker on hover */
       </style>
     </head>
     <body>
@@ -71,40 +108,88 @@ data:
       <p>This page is served by <strong>nginx</strong> running inside a Kubernetes pod.</p>
       <p>Click the button to call the <strong>backend API</strong> through the nginx proxy.</p>
 
+      <!-- Button triggers the JavaScript function below -->
       <button onclick="callBackend()">Call Backend API</button>
 
+      <!-- Response card — content is injected by JavaScript after API call -->
       <div class="response-box">
         <h3>API Response:</h3>
-        <!-- This div is updated by JavaScript when the button is clicked -->
         <div id="result">Click the button to see the backend response...</div>
       </div>
 
       <script>
         async function callBackend() {
           const resultDiv = document.getElementById('result');
-          resultDiv.innerHTML = 'Loading...';
+          resultDiv.innerHTML = 'Loading...';  // Show loading state immediately
 
           try {
-            // We call /api — a path on THIS nginx server (same host)
-            // Nginx will proxy_pass this to http://backend:5000 internally
-            // The browser never directly contacts the backend
+            // ── API CALL ───────────────────────────────────
+            // We call /api — a path on THIS nginx server
+            // nginx.conf rule: location /api → proxy_pass http://backend:5000
+            // The browser never directly contacts the backend pod
+            // Kubernetes DNS resolves "backend" inside the cluster only
             const response = await fetch('/api');
 
+            // Throw an error for non-200 HTTP responses
             if (!response.ok) {
               throw new Error('HTTP error! status: ' + response.status);
             }
 
+            // Parse the JSON response from the backend
+            // Expected fields: message, environment, version, pod, timestamp
             const data = await response.json();
 
-            // Display the response with formatting
+            // ── ENVIRONMENT BADGE ──────────────────────────
+            // Dynamically build CSS class from environment value
+            // e.g., data.environment = "development"
+            //   → class = "env-badge env-development"  → orange badge
+            // e.g., data.environment = "production"
+            //   → class = "env-badge env-production"   → green badge
+            const envClass = 'env-badge env-' + data.environment;
+            const envBadge = '<span class="' + envClass + '">' + data.environment + '</span>';
+
+            // ── RENDER RESPONSE ────────────────────────────
+            // Build HTML string with all five backend fields
+            // Each field displayed as a labelled row in the response card
             resultDiv.innerHTML =
               '<span class="status-ok">✅ Success!</span><br><br>' +
-              '<strong>Message:</strong> '   + data.message   + '<br>' +
-              '<strong>Backend Pod:</strong> ' + data.pod     + '<br>' +
-              '<strong>Timestamp:</strong> '  + data.timestamp;
+
+              // Field 1: Message (from APP_MESSAGE env var via ConfigMap)
+              '<div class="field-row">' +
+                '<span class="field-label">MESSAGE</span><br>' +
+                '<span class="field-value">' + data.message + '</span>' +
+              '</div>' +
+
+              // Field 2: Environment (from APP_ENV env var via ConfigMap)
+              // Shows as a color-coded badge (orange/purple/green)
+              '<div class="field-row">' +
+                '<span class="field-label">ENVIRONMENT</span><br>' +
+                '<span class="field-value">' + envBadge + '</span>' +
+              '</div>' +
+
+              // Field 3: Version (from APP_VERSION env var via ConfigMap)
+              '<div class="field-row">' +
+                '<span class="field-label">VERSION</span><br>' +
+                '<span class="field-value">v' + data.version + '</span>' +
+              '</div>' +
+
+              // Field 4: Pod name (from process.env.HOSTNAME, auto-set by Kubernetes)
+              // Shows WHICH backend pod served this request
+              // Click multiple times to see load balancing between pods!
+              '<div class="field-row">' +
+                '<span class="field-label">BACKEND POD</span><br>' +
+                '<span class="field-value">' + data.pod + '</span>' +
+              '</div>' +
+
+              // Field 5: Timestamp (generated by backend at request time)
+              '<div class="field-row">' +
+                '<span class="field-label">TIMESTAMP</span><br>' +
+                '<span class="field-value">' + data.timestamp + '</span>' +
+              '</div>';
 
           } catch (error) {
-            // Show a clear error if something goes wrong
+            // Display a clear error message if anything goes wrong
+            // e.g., backend is down, network error, JSON parse failure
             resultDiv.innerHTML =
               '<span class="status-err">❌ Error: ' + error.message + '</span>';
           }
@@ -114,43 +199,43 @@ data:
     </html>
 
   # ─────────────────────────────────────────────────────────
-  # KEY 2: nginx.conf
-  # Controls how nginx behaves inside the container
-  # Most importantly: defines the /api proxy rule
+  # KEY 2: nginx.conf (unchanged)
+  # Controls nginx behaviour inside the container
+  # Key rule: proxies /api requests to the backend ClusterIP
   # ─────────────────────────────────────────────────────────
   nginx.conf: |
     server {
-      # Listen on port 80 (standard HTTP port)
+      # Listen on port 80 (standard HTTP)
       listen 80;
 
-      # Serve files from this directory (where we'll mount index.html)
+      # Serve static files from this directory
+      # This is where our index.html volume mount lands
       root /usr/share/nginx/html;
       index index.html;
 
       # ── PROXY RULE ──────────────────────────────────────
-      # When browser requests /api, nginx forwards it internally
-      # to the backend ClusterIP service on port 5000
-      # This is the key that makes cross-service communication work
+      # Browser calls /api → nginx forwards to backend internally
+      # "backend" is resolved by Kubernetes cluster DNS
+      # → ClusterIP 10.98.75.247 → one of the backend pods
       location /api {
-        # Rewrite /api to / before forwarding
-        # e.g., browser calls /api → backend receives /
+        # Strip /api prefix before forwarding to backend
+        # Browser sends:  GET /api
+        # Backend receives: GET /
         rewrite ^/api$ / break;
 
-        # Forward to backend using its Kubernetes DNS name
-        # "backend" resolves to the ClusterIP service we created earlier
+        # Forward to backend ClusterIP service by DNS name
+        # Only works inside the cluster — nginx is inside, browser is not
         proxy_pass http://backend:5000;
 
-        # Pass the original host header to the backend
-        proxy_set_header Host $host;
-
-        # Pass the real client IP to the backend
-        proxy_set_header X-Real-IP $remote_addr;
+        # Forward original headers to the backend
+        proxy_set_header Host $host;           # Original host header
+        proxy_set_header X-Real-IP $remote_addr; # Real client IP
       }
 
       # ── STATIC FILES ────────────────────────────────────
-      # All other requests → serve static files (index.html, css, etc.)
+      # All other requests → serve from /usr/share/nginx/html
       location / {
-        # Try the requested file first, fall back to index.html
+        # Try exact file → directory → fallback to index.html
         try_files $uri $uri/ /index.html;
       }
     }
