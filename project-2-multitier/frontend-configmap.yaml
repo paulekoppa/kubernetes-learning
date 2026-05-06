@@ -1,0 +1,156 @@
+# ============================================================
+# FRONTEND CONFIGMAP
+# Stores two files that nginx needs:
+#   1. index.html  - the webpage the browser sees
+#   2. nginx.conf  - nginx behavior + proxy rules
+# Keeping config here means no Docker rebuild on changes
+# ============================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config       # Referenced by the Deployment to mount these files
+  namespace: project-2        # Must be in same namespace as the pods that use it
+  labels:
+    app: frontend
+    project: multitier
+    tier: frontend
+
+data:
+  # ─────────────────────────────────────────────────────────
+  # KEY 1: index.html
+  # This is the webpage your browser loads
+  # The JavaScript inside calls /api (our nginx proxy path)
+  # ─────────────────────────────────────────────────────────
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Kubernetes Multi-Tier App</title>
+      <style>
+        /* Simple clean styling */
+        body {
+          font-family: Arial, sans-serif;
+          max-width: 800px;
+          margin: 50px auto;
+          padding: 20px;
+          background-color: #f0f4f8;
+        }
+        h1 { color: #2c3e50; }
+
+        /* The card that displays the API response */
+        .response-box {
+          background: white;
+          border-radius: 8px;
+          padding: 20px;
+          margin-top: 20px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        /* Color-coded status indicators */
+        .status-ok  { color: #27ae60; font-weight: bold; }  /* green = success */
+        .status-err { color: #e74c3c; font-weight: bold; }  /* red   = error   */
+
+        button {
+          background-color: #3498db;
+          color: white;
+          border: none;
+          padding: 10px 20px;
+          border-radius: 5px;
+          cursor: pointer;
+          font-size: 16px;
+          margin-top: 10px;
+        }
+        button:hover { background-color: #2980b9; }
+      </style>
+    </head>
+    <body>
+      <h1>🚀 Kubernetes Multi-Tier App</h1>
+      <p>This page is served by <strong>nginx</strong> running inside a Kubernetes pod.</p>
+      <p>Click the button to call the <strong>backend API</strong> through the nginx proxy.</p>
+
+      <button onclick="callBackend()">Call Backend API</button>
+
+      <div class="response-box">
+        <h3>API Response:</h3>
+        <!-- This div is updated by JavaScript when the button is clicked -->
+        <div id="result">Click the button to see the backend response...</div>
+      </div>
+
+      <script>
+        async function callBackend() {
+          const resultDiv = document.getElementById('result');
+          resultDiv.innerHTML = 'Loading...';
+
+          try {
+            // We call /api — a path on THIS nginx server (same host)
+            // Nginx will proxy_pass this to http://backend:5000 internally
+            // The browser never directly contacts the backend
+            const response = await fetch('/api');
+
+            if (!response.ok) {
+              throw new Error('HTTP error! status: ' + response.status);
+            }
+
+            const data = await response.json();
+
+            // Display the response with formatting
+            resultDiv.innerHTML =
+              '<span class="status-ok">✅ Success!</span><br><br>' +
+              '<strong>Message:</strong> '   + data.message   + '<br>' +
+              '<strong>Backend Pod:</strong> ' + data.pod     + '<br>' +
+              '<strong>Timestamp:</strong> '  + data.timestamp;
+
+          } catch (error) {
+            // Show a clear error if something goes wrong
+            resultDiv.innerHTML =
+              '<span class="status-err">❌ Error: ' + error.message + '</span>';
+          }
+        }
+      </script>
+    </body>
+    </html>
+
+  # ─────────────────────────────────────────────────────────
+  # KEY 2: nginx.conf
+  # Controls how nginx behaves inside the container
+  # Most importantly: defines the /api proxy rule
+  # ─────────────────────────────────────────────────────────
+  nginx.conf: |
+    server {
+      # Listen on port 80 (standard HTTP port)
+      listen 80;
+
+      # Serve files from this directory (where we'll mount index.html)
+      root /usr/share/nginx/html;
+      index index.html;
+
+      # ── PROXY RULE ──────────────────────────────────────
+      # When browser requests /api, nginx forwards it internally
+      # to the backend ClusterIP service on port 5000
+      # This is the key that makes cross-service communication work
+      location /api {
+        # Rewrite /api to / before forwarding
+        # e.g., browser calls /api → backend receives /
+        rewrite ^/api$ / break;
+
+        # Forward to backend using its Kubernetes DNS name
+        # "backend" resolves to the ClusterIP service we created earlier
+        proxy_pass http://backend:5000;
+
+        # Pass the original host header to the backend
+        proxy_set_header Host $host;
+
+        # Pass the real client IP to the backend
+        proxy_set_header X-Real-IP $remote_addr;
+      }
+
+      # ── STATIC FILES ────────────────────────────────────
+      # All other requests → serve static files (index.html, css, etc.)
+      location / {
+        # Try the requested file first, fall back to index.html
+        try_files $uri $uri/ /index.html;
+      }
+    }

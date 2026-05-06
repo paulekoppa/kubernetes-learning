@@ -1,0 +1,78 @@
+# ============================================================
+# FRONTEND DEPLOYMENT
+# Runs nginx to serve our HTML page and proxy /api to backend
+# Uses ConfigMap volumes to inject html and nginx config
+# ============================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: project-2
+  labels:
+    app: frontend
+    project: multitier
+    tier: frontend
+
+spec:
+  replicas: 1                  # One frontend pod is enough for learning
+  selector:
+    matchLabels:
+      app: frontend            # Manages pods with this label
+
+  template:
+    metadata:
+      labels:
+        app: frontend          # MUST match selector.matchLabels above
+        tier: frontend
+
+    spec:
+      containers:
+      - name: nginx                    # Container name
+        image: nginx:alpine            # Lightweight nginx image
+
+        ports:
+        - containerPort: 80            # Nginx listens on port 80 inside the pod
+          name: http
+
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+
+        # ── VOLUME MOUNTS ──────────────────────────────────
+        # This is where ConfigMap files are injected into the container
+        # Think of volumeMounts as "where inside the container to plug in the USB drive"
+        volumeMounts:
+
+        - name: html-volume            # Must match a volume name below
+          mountPath: /usr/share/nginx/html   # Where nginx looks for HTML files
+                                             # index.html will appear here
+
+        - name: config-volume          # Must match a volume name below
+          mountPath: /etc/nginx/conf.d       # Where nginx looks for config files
+                                             # nginx.conf will appear here
+
+      # ── VOLUMES ──────────────────────────────────────────
+      # This is where we define WHAT to mount
+      # Think of volumes as "the USB drives themselves"
+      # They reference the ConfigMap as the source of files
+      volumes:
+
+      - name: html-volume              # Name referenced by volumeMounts above
+        configMap:
+          name: frontend-config        # Pull from our ConfigMap
+          items:
+          - key: index.html            # The key in the ConfigMap
+            path: index.html           # The filename inside the mounted directory
+
+      - name: config-volume            # Name referenced by volumeMounts above
+        configMap:
+          name: frontend-config        # Same ConfigMap, different key
+          items:
+          - key: nginx.conf            # The key in the ConfigMap
+            path: default.conf         # nginx loads *.conf files from conf.d/
+                                       # We name it default.conf (nginx convention)
