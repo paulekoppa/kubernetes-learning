@@ -1,0 +1,36 @@
+# ============================================================
+# FRONTEND NODEPORT SERVICE
+# Exposes the nginx frontend to the outside world
+# NodePort = accessible from your browser via node IP + port
+#
+# Compare to backend-service.yaml:
+#   Backend  → ClusterIP  (internal only, pods talk to it)
+#   Frontend → NodePort   (external access, browser talks to it)
+# ============================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: project-2
+  labels:
+    app: frontend
+    project: multitier
+    tier: frontend
+
+spec:
+  type: NodePort             # Exposes service on each Node's IP at a static port
+                             # Accessible from outside the cluster
+
+  selector:
+    app: frontend            # Routes traffic to pods with label app=frontend
+                             # Same label selector concept as ClusterIP
+
+  ports:
+  - name: http
+    port: 80                 # Port inside the cluster (ClusterIP port)
+    targetPort: 80           # Port on the pod (nginx listens on 80)
+    nodePort: 30080          # External port on the node (your entry point)
+                             # Range: 30000-32767
+                             # You'll access: http://<node-ip>:30080
+    protocol: TCP
