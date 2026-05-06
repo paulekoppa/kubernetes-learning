@@ -1,78 +1,109 @@
 # ============================================================
-# BACKEND DEPLOYMENT
-# Manages the pods running our Node.js API server
-# Namespace: project-2 (isolated from other projects)
+# BACKEND DEPLOYMENT (updated)
+# Now reads configuration from environment variables
+# Environment variables sourced from backend-config ConfigMap
 # ============================================================
 
-apiVersion: apps/v1        # API version that supports Deployments
-kind: Deployment           # We want a Deployment (manages ReplicaSets + Pods)
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: backend            # Name of this Deployment object
-  namespace: project-2     # Lives in our dedicated project-2 namespace
+  name: backend
+  namespace: project-2
   labels:
-    app: backend           # Identifies this resource as the backend app
-    project: multitier     # Groups it under our multitier project
-    tier: backend          # Marks it as the backend tier (vs frontend)
+    app: backend
+    project: multitier
+    tier: backend
 
 spec:
-  replicas: 2              # Run 2 identical backend pods for availability
-
+  replicas: 2
   selector:
     matchLabels:
-      app: backend         # This Deployment manages pods with label app=backend
+      app: backend
 
-  template:                # Pod template — defines what each pod looks like
+  template:
     metadata:
       labels:
-        app: backend       # MUST match selector.matchLabels above
-        tier: backend      # Extra label for filtering/observability
+        app: backend
+        tier: backend
 
     spec:
       containers:
-      - name: api                  # Name of the container inside the pod
-        image: node:18-alpine      # Lightweight Node.js 18 image (Alpine Linux)
-
-        # We use a shell command to write + run a JS file inline
-        # This avoids needing a custom Docker image for learning purposes
+      - name: api
+        image: node:18-alpine
         command:
           - sh
           - -c
           - |
-            # Write the Node.js server code to a file called server.js
             cat > server.js << 'JSEOF'
-            const http = require('http');  // Built-in Node.js HTTP module
-            const port = 5000;            // Port our API will listen on
+            const http = require('http');
+            const port = 5000;
+
+            // Read configuration from environment variables
+            // process.env reads variables injected by Kubernetes
+            // The || provides a fallback if the variable is not set
+            const appMessage = process.env.APP_MESSAGE || 'Hello from Backend!';
+            const appEnv     = process.env.APP_ENV     || 'unknown';
+            const appVersion = process.env.APP_VERSION || '1.0.0';
 
             const server = http.createServer((req, res) => {
-              res.statusCode = 200;                              // HTTP 200 OK
-              res.setHeader('Content-Type', 'application/json'); // Return JSON
-              res.setHeader('Access-Control-Allow-Origin', '*'); // Allow frontend to call us (CORS)
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('Access-Control-Allow-Origin', '*');
               res.end(JSON.stringify({
-                message: 'Hello from the Backend API!',  // Static message
-                pod: process.env.HOSTNAME,               // Pod name (set automatically by K8s)
-                timestamp: new Date().toISOString()      // Current time
+                message:   appMessage,           // From ConfigMap via env var
+                environment: appEnv,             // From ConfigMap via env var
+                version:   appVersion,           // From ConfigMap via env var
+                pod:       process.env.HOSTNAME, // Auto-set by Kubernetes
+                timestamp: new Date().toISOString()
               }));
             });
 
-            // Start listening on all network interfaces (0.0.0.0)
-            // so Kubernetes can route traffic to this pod from any node
             server.listen(port, '0.0.0.0', () => {
-              console.log('Backend API running on port ' + port);
+              console.log('Backend API v' + appVersion + ' running on port ' + port);
+              console.log('Environment: ' + appEnv);
+              console.log('Message configured as: ' + appMessage);
             });
             JSEOF
-
-            # Execute the server file we just wrote
             node server.js
 
         ports:
-        - containerPort: 5000    # The port this container exposes (must match server.js)
-          name: http             # Named port — makes it easier to reference in services
+        - containerPort: 5000
+          name: http
 
-        # Resource management — same concept as Project 1
+        # ── ENVIRONMENT VARIABLES ──────────────────────────
+        # Injected into the container at runtime
+        # Pod can read these via process.env in Node.js
+        env:
+
+        # Method 1: Direct value (hardcoded in YAML)
+        # Good for values that don't change between environments
+        - name: NODE_ENV
+          value: "production"
+
+        # Method 2: From ConfigMap (recommended for configurable values)
+        # Pulls each key from backend-config ConfigMap individually
+        - name: APP_MESSAGE
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config    # Name of the ConfigMap
+              key: APP_MESSAGE        # Key inside the ConfigMap
+
+        - name: APP_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config    # Same ConfigMap
+              key: APP_ENV            # Different key
+
+        - name: APP_VERSION
+          valueFrom:
+            configMapKeyRef:
+              name: backend-config    # Same ConfigMap
+              key: APP_VERSION        # Different key
+
         resources:
           requests:
-            memory: "64Mi"   # Minimum memory Kubernetes reserves for this pod
-            cpu: "100m"      # Minimum CPU (100 millicores = 0.1 vCPU)
+            memory: "64Mi"
+            cpu: "100m"
           limits:
-            memory: "128Mi"  # Maximum memory — pod is killed if it exceeds this
-            cpu: "200m"      # Maximum CPU — pod is throttled if it exceeds this
+            memory: "128Mi"
+            cpu: "200m"

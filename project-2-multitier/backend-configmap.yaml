@@ -1,0 +1,23 @@
+# ============================================================
+# BACKEND CONFIGMAP
+# Stores non-sensitive configuration for the backend API
+# Injected as environment variables into the backend pods
+# Change values here → redeploy pods → new behaviour
+# No Docker image rebuild needed!
+# ============================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config          # Referenced in backend-deployment.yaml
+  namespace: project-2
+  labels:
+    app: backend
+    project: multitier
+    tier: backend
+
+data:
+  # These key-value pairs become environment variables in the pod
+  APP_MESSAGE: "Hello from the Backend API - Configured via ConfigMap!"
+  APP_ENV: "development"
+  APP_VERSION: "2.0.0"
