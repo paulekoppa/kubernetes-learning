@@ -1,0 +1,22 @@
+# mysql-service.yaml
+# Headless Service for the MySQL StatefulSet.
+# clusterIP: None means no load-balancing IP is assigned.
+# Instead, each pod gets its own DNS record:
+#   mysql-0.mysql.project-3.svc.cluster.local
+# This lets clients address a specific pod directly,
+# which is essential for databases.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql                 # StatefulSet's serviceName must match this
+  namespace: project-3
+  labels:
+    app: mysql
+spec:
+  clusterIP: None             # ← this makes it a Headless Service
+  selector:
+    app: mysql                # routes to pods with label app=mysql
+  ports:
+    - name: mysql
+      port: 3306              # standard MySQL port
+      targetPort: 3306
