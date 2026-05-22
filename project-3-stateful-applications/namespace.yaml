@@ -1,0 +1,9 @@
+# namespace.yaml
+# Isolates all Project 3 resources from other projects in the cluster.
+# Every subsequent resource will specify namespace: project-3.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: project-3
+  labels:
+    project: stateful-applications  # label for easy filtering

@@ -1,0 +1,80 @@
+# mysql-statefulset.yaml
+# Deploys MySQL as a StatefulSet with persistent storage.
+# Key differences from a Deployment:
+#   - Pod names are stable: mysql-0, mysql-1, etc.
+#   - Each pod gets its own PVC via volumeClaimTemplates
+#   - The PVC survives pod deletion and re-attaches on restart
+#   - Requires a Headless Service (mysql-service.yaml)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql                 # pods will be named mysql-0, mysql-1, etc.
+  namespace: project-3
+  labels:
+    app: mysql
+spec:
+  serviceName: mysql          # MUST match the Headless Service name
+                              # this is what enables per-pod DNS entries
+  replicas: 1                 # single instance for learning
+                              # in production: 1 primary + N replicas
+  selector:
+    matchLabels:
+      app: mysql              # StatefulSet manages pods with this label
+
+  template:
+    metadata:
+      labels:
+        app: mysql            # must match selector.matchLabels above
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.0    # MySQL 8.0 - stable, widely used version
+          ports:
+            - containerPort: 3306
+              name: mysql
+          env:
+            # Read the root password from our Secret, not hardcoded here.
+            # valueFrom.secretKeyRef tells Kubernetes:
+            #   "get the key 'root-password' from Secret 'mysql-secret'"
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret      # Secret name
+                  key: root-password      # key inside the Secret
+
+            # Create an initial database on first startup.
+            # MySQL's official image reads this env var and
+            # creates the database automatically.
+            - name: MYSQL_DATABASE
+              value: "appdb"             # our application database
+
+          volumeMounts:
+            # Mount the persistent volume at MySQL's data directory.
+            # Everything MySQL writes goes here and is preserved
+            # across pod restarts.
+            - name: mysql-data           # must match volumeClaimTemplates name
+              mountPath: /var/lib/mysql  # MySQL's default data directory
+
+          resources:
+            requests:
+              memory: "256Mi"            # minimum guaranteed memory
+              cpu: "250m"                # 0.25 CPU cores guaranteed
+            limits:
+              memory: "512Mi"            # hard cap - pod killed if exceeded
+              cpu: "500m"                # 0.5 CPU cores maximum
+
+  # volumeClaimTemplates is the StatefulSet superpower.
+  # For each pod, Kubernetes automatically creates a PVC named:
+  #   <template-name>-<pod-name>  →  mysql-data-mysql-0
+  # This PVC is NEVER deleted when the pod is deleted.
+  # When mysql-0 is recreated, it re-attaches to mysql-data-mysql-0.
+  volumeClaimTemplates:
+    - metadata:
+        name: mysql-data                 # PVC will be: mysql-data-mysql-0
+      spec:
+        accessModes:
+          - ReadWriteOnce                # one pod, read+write (correct for DB)
+        storageClassName: standard       # use Minikube's default StorageClass
+        resources:
+          requests:
+            storage: 1Gi               # 1 GiB of persistent storage
