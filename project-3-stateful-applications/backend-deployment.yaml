@@ -11,7 +11,7 @@ metadata:
   labels:
     app: backend
 spec:
-  replicas: 2                   # 2 replicas - stateless so safe to scale
+  replicas: 2
   selector:
     matchLabels:
       app: backend
@@ -20,10 +20,6 @@ spec:
       labels:
         app: backend
     spec:
-      # initContainer runs before the main container starts.
-      # It installs the mysql2 npm package into a shared volume
-      # so the main container has the dependency available.
-      # This avoids needing a custom Docker image.
       initContainers:
         - name: npm-install
           image: node:18-alpine
@@ -36,11 +32,10 @@ spec:
               npm init -y
               npm install mysql2
           volumeMounts:
-            - name: app-volume         # shared with main container
+            - name: app-volume
               mountPath: /app
-            - name: source-code        # ConfigMap with app.js
+            - name: source-code
               mountPath: /src
-
       containers:
         - name: backend
           image: node:18-alpine
@@ -48,28 +43,31 @@ spec:
           ports:
             - containerPort: 3000
           env:
-            # MySQL connection details passed as environment variables.
-            # The host uses the per-pod DNS name from the Headless Service:
-            #   mysql-0.mysql.project-3.svc.cluster.local
-            # This always resolves to mysql-0 specifically, not load-balanced.
+            # All MySQL connection details come from the Secret.
+            # No sensitive values are hardcoded in this manifest.
             - name: MYSQL_HOST
               value: "mysql-0.mysql.project-3.svc.cluster.local"
             - name: MYSQL_PORT
               value: "3306"
             - name: MYSQL_USER
-              value: "root"
-            # Password pulled from the Secret - never hardcoded
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: app-username
             - name: MYSQL_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: mysql-secret
-                  key: root-password
+                  key: app-password
             - name: MYSQL_DATABASE
-              value: "appdb"
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: app-database
             - name: PORT
               value: "3000"
           volumeMounts:
-            - name: app-volume         # contains app.js + node_modules
+            - name: app-volume
               mountPath: /app
           resources:
             requests:
@@ -78,16 +76,9 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "250m"
-
       volumes:
-        # app-volume: ephemeral shared space between initContainer
-        # and main container. initContainer writes app.js + node_modules,
-        # main container reads and runs them.
         - name: app-volume
           emptyDir: {}
-
-        # source-code: mounts app.js from the ConfigMap into the
-        # initContainer so it can be copied to the shared volume.
         - name: source-code
           configMap:
             name: backend-code
