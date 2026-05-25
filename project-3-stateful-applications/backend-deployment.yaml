@@ -1,0 +1,84 @@
+# backend-deployment.yaml
+# Runs the Node.js backend API as a stateless Deployment.
+# The backend is stateless because it holds no data itself -
+# all persistence is delegated to MySQL.
+# The application code is mounted from the backend-code ConfigMap.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: project-3
+  labels:
+    app: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      initContainers:
+        - name: npm-install
+          image: node:18-alpine
+          command:
+            - sh
+            - -c
+            - |
+              cp /src/app.js /app/app.js
+              cd /app
+              npm init -y
+              npm install mysql2
+          volumeMounts:
+            - name: app-volume
+              mountPath: /app
+            - name: source-code
+              mountPath: /src
+      containers:
+        - name: backend
+          image: node:18-alpine
+          command: ["node", "/app/app.js"]
+          ports:
+            - containerPort: 3000
+          env:
+            # All MySQL connection details come from the Secret.
+            # No sensitive values are hardcoded in this manifest.
+            - name: MYSQL_HOST
+              value: "mysql-0.mysql.project-3.svc.cluster.local"
+            - name: MYSQL_PORT
+              value: "3306"
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: app-username
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: app-password
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: app-database
+            - name: PORT
+              value: "3000"
+          volumeMounts:
+            - name: app-volume
+              mountPath: /app
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+      volumes:
+        - name: app-volume
+          emptyDir: {}
+        - name: source-code
+          configMap:
+            name: backend-code

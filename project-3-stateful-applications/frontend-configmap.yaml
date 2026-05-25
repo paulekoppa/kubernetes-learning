@@ -1,0 +1,130 @@
+# frontend-configmap.yaml
+# Delivers two files to the Nginx frontend pod:
+#   1. nginx.conf  - reverse proxy configuration
+#   2. index.html  - the user interface
+# Using ConfigMaps means we can update content without
+# rebuilding any Docker image.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: project-3
+  labels:
+    app: frontend
+data:
+  # ── nginx.conf ────────────────────────────────────────────────────
+  # Configures Nginx to:
+  #   - Serve index.html for all non-API requests
+  #   - Proxy /api/* requests to the backend ClusterIP Service
+  nginx.conf: |
+    events {}
+    http {
+      server {
+        listen 80;
+
+        # Serve the frontend HTML for the root path
+        location / {
+          root /usr/share/nginx/html;
+          index index.html;
+        }
+
+        # Proxy all /api/* requests to the backend service.
+        # "backend" resolves via Kubernetes DNS to the backend
+        # ClusterIP Service in the same namespace.
+        location /api/ {
+          proxy_pass http://backend:3000;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+        }
+      }
+    }
+
+  # ── index.html ────────────────────────────────────────────────────
+  # Simple UI to interact with the backend API:
+  #   - Shows current users from the database
+  #   - Allows adding a new user
+  #   - Refresh button to reload the user list
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Project 3 - Stateful App</title>
+      <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+        h1   { color: #2c3e50; }
+        h2   { color: #34495e; margin-top: 30px; }
+        input { padding: 8px; width: 200px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 8px 16px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 8px; }
+        button:hover { background: #2980b9; }
+        #refresh { background: #27ae60; margin-left: 0; margin-top: 10px; }
+        #refresh:hover { background: #219a52; }
+        ul   { list-style: none; padding: 0; }
+        li   { padding: 8px; border-bottom: 1px solid #eee; }
+        #status { color: #27ae60; margin-top: 10px; font-weight: bold; }
+        #error  { color: #e74c3c; margin-top: 10px; }
+      </style>
+    </head>
+    <body>
+      <h1>Project 3: Stateful Application</h1>
+      <p>Data is persisted in MySQL via a Kubernetes StatefulSet and PVC.</p>
+
+      <h2>Add a User</h2>
+      <input type="text" id="nameInput" placeholder="Enter a name" />
+      <button onclick="addUser()">Add User</button>
+      <div id="status"></div>
+      <div id="error"></div>
+
+      <h2>Users in Database <button id="refresh" onclick="loadUsers()">Refresh</button></h2>
+      <ul id="userList"><li>Loading...</li></ul>
+
+      <script>
+        async function loadUsers() {
+          try {
+            const res = await fetch('/api/users');
+            const data = await res.json();
+            const list = document.getElementById('userList');
+            if (data.users.length === 0) {
+              list.innerHTML = '<li>No users yet.</li>';
+            } else {
+              list.innerHTML = data.users
+                .map(u => '<li>#' + u.id + ' — ' + u.name + ' (' + new Date(u.created_at).toLocaleString() + ')</li>')
+                .join('');
+            }
+          } catch(e) {
+            document.getElementById('userList').innerHTML = '<li>Error loading users.</li>';
+          }
+        }
+
+        async function addUser() {
+          const name = document.getElementById('nameInput').value.trim();
+          const statusEl = document.getElementById('status');
+          const errorEl  = document.getElementById('error');
+          statusEl.textContent = '';
+          errorEl.textContent  = '';
+
+          if (!name) { errorEl.textContent = 'Please enter a name.'; return; }
+
+          try {
+            const res = await fetch('/api/users', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name })
+            });
+            const data = await res.json();
+            if (res.ok) {
+              statusEl.textContent = 'User "' + data.name + '" added with ID ' + data.id;
+              document.getElementById('nameInput').value = '';
+              loadUsers();
+            } else {
+              errorEl.textContent = 'Error: ' + data.error;
+            }
+          } catch(e) {
+            errorEl.textContent = 'Request failed: ' + e.message;
+          }
+        }
+
+        // Load users automatically when the page opens
+        loadUsers();
+      </script>
+    </body>
+    </html>

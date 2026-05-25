@@ -1,0 +1,111 @@
+# backend-configmap.yaml
+# Delivers the Node.js backend application code as a ConfigMap.
+# The file app.js is mounted into the backend pod at /app/app.js.
+# This pattern lets us change application code without rebuilding
+# a Docker image - ideal for learning environments.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-code
+  namespace: project-3
+  labels:
+    app: backend
+data:
+  # app.js is the entire Node.js backend application.
+  # It connects to MySQL using the 'mysql2' package and exposes
+  # three REST endpoints for health, reading, and writing users.
+  app.js: |
+    'use strict';
+
+    const http = require('http');
+    const mysql = require('mysql2/promise');
+
+    // ── Database connection configuration ──────────────────────────
+    // These values come from environment variables injected by
+    // Kubernetes (see backend-deployment.yaml env section).
+    // MYSQL_HOST uses the Headless Service DNS name so it always
+    // resolves to mysql-0, regardless of pod restarts.
+    const DB_CONFIG = {
+      host:     process.env.MYSQL_HOST,      // mysql-0.mysql.project-3.svc.cluster.local
+      port:     parseInt(process.env.MYSQL_PORT || '3306'),
+      user:     process.env.MYSQL_USER,      // root
+      password: process.env.MYSQL_PASSWORD,  // from Secret
+      database: process.env.MYSQL_DATABASE,  // appdb
+    };
+
+    // ── Simple JSON response helper ─────────────────────────────────
+    function sendJSON(res, statusCode, data) {
+      const body = JSON.stringify(data, null, 2);
+      res.writeHead(statusCode, {
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      });
+      res.end(body);
+    }
+
+    // ── Request router ──────────────────────────────────────────────
+    async function handleRequest(req, res) {
+      // Parse URL path only (ignore query string)
+      const path = req.url.split('?')[0];
+
+      // GET /api/health - liveness check, also tests DB connectivity
+      if (req.method === 'GET' && path === '/api/health') {
+        try {
+          const conn = await mysql.createConnection(DB_CONFIG);
+          await conn.ping();
+          await conn.end();
+          sendJSON(res, 200, {
+            status:   'ok',
+            database: 'connected',
+            time:     new Date().toISOString(),
+          });
+        } catch (err) {
+          sendJSON(res, 503, { status: 'error', message: err.message });
+        }
+
+      // GET /api/users - fetch all users from the database
+      } else if (req.method === 'GET' && path === '/api/users') {
+        try {
+          const conn = await mysql.createConnection(DB_CONFIG);
+          const [rows] = await conn.execute('SELECT * FROM users ORDER BY id');
+          await conn.end();
+          sendJSON(res, 200, { users: rows });
+        } catch (err) {
+          sendJSON(res, 500, { error: err.message });
+        }
+
+      // POST /api/users - insert a new user
+      // Expects JSON body: { "name": "Charlie" }
+      } else if (req.method === 'POST' && path === '/api/users') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+          try {
+            const { name } = JSON.parse(body);
+            if (!name) {
+              return sendJSON(res, 400, { error: 'name is required' });
+            }
+            const conn = await mysql.createConnection(DB_CONFIG);
+            const [result] = await conn.execute(
+              'INSERT INTO users (name) VALUES (?)', [name]
+            );
+            await conn.end();
+            sendJSON(res, 201, { id: result.insertId, name });
+          } catch (err) {
+            sendJSON(res, 500, { error: err.message });
+          }
+        });
+
+      // 404 for anything else
+      } else {
+        sendJSON(res, 404, { error: 'not found' });
+      }
+    }
+
+    // ── Start the HTTP server ───────────────────────────────────────
+    const PORT = parseInt(process.env.PORT || '3000');
+    const server = http.createServer(handleRequest);
+    server.listen(PORT, () => {
+      console.log(`Backend API listening on port ${PORT}`);
+      console.log(`Connecting to MySQL at ${DB_CONFIG.host}:${DB_CONFIG.port}`);
+    });

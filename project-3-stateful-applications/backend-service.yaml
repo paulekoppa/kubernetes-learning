@@ -1,0 +1,21 @@
+# backend-service.yaml
+# ClusterIP Service for the backend API.
+# ClusterIP means it is only reachable from inside the cluster.
+# The frontend Nginx will proxy /api/* requests to this service.
+# Kubernetes DNS resolves "backend" to this service automatically
+# within the project-3 namespace.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: project-3
+  labels:
+    app: backend
+spec:
+  type: ClusterIP             # internal only - not exposed outside cluster
+  selector:
+    app: backend              # routes to pods with label app=backend
+  ports:
+    - name: http
+      port: 3000              # port other services use to reach the backend
+      targetPort: 3000        # port the backend container listens on
