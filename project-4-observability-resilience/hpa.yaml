@@ -1,0 +1,71 @@
+# ==============================================================
+# hpa.yaml
+# HorizontalPodAutoscaler for the backend Deployment.
+#
+# HOW HPA WORKS:
+# Every 15 seconds HPA checks the Metrics Server for the
+# average CPU usage across all backend pods.
+# It compares actual usage against the target percentage
+# of the CPU request value (100m × 50% = 50m target).
+#
+# SCALE UP formula:
+#   desired = ceil(currentReplicas × (currentCPU% ÷ targetCPU%))
+#   Example: 1 pod at 200% of request → ceil(1 × 200/50) = 4 pods
+#
+# SCALE DOWN behaviour:
+#   HPA waits 5 minutes of sustained low usage before scaling
+#   down — this prevents "flapping" (rapid up/down cycling).
+#
+# PREREQUISITES SATISFIED:
+#   ✅ Metrics Server enabled (Step 5)
+#   ✅ CPU requests defined on backend (Step 4)
+#   ✅ Backend Deployment exists with app=backend label
+# ==============================================================
+
+apiVersion: autoscaling/v2                # v2 API — supports multiple metric types
+                                          # v1 only supported CPU; v2 adds memory,
+                                          # custom metrics, and external metrics
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa                       # HPA resource name
+  namespace: project-4
+  labels:
+    project: project-4
+    tier: backend
+spec:
+  # -------------------------------------------------------
+  # SCALE TARGET
+  # Points HPA at the Deployment to scale.
+  # HPA will adjust spec.replicas on this Deployment.
+  # -------------------------------------------------------
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend                         # Must match the Deployment name exactly
+
+  # -------------------------------------------------------
+  # REPLICA BOUNDS
+  # HPA will never go below minReplicas or above maxReplicas.
+  # This prevents both over-scaling (cost) and under-scaling
+  # (availability) regardless of the metric values.
+  # -------------------------------------------------------
+  minReplicas: 1                          # Minimum — scale to zero is not supported by default HPA
+  maxReplicas: 5                          # Maximum — protects cluster from unbounded scaling
+
+  # -------------------------------------------------------
+  # METRICS — what to measure and what target to hit
+  # type: Resource means we're using built-in CPU/memory.
+  # averageUtilization: 50 means scale up when average CPU
+  # across all backend pods exceeds 50% of their request.
+  #
+  # Our request = 100m, so target usage = 50m per pod.
+  # If average exceeds 50m → scale up.
+  # If average drops well below 50m → scale down (after 5min).
+  # -------------------------------------------------------
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu                         # Metric to watch — cpu or memory
+        target:
+          type: Utilization               # Utilization = % of request value
+          averageUtilization: 50          # Target: keep average CPU below 50% of request
