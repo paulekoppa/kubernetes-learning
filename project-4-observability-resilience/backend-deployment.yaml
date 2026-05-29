@@ -1,0 +1,122 @@
+# ==============================================================
+# backend-deployment.yaml (v3 — with Probes + Resources)
+#
+# WHAT CHANGED FROM v2:
+# Added resources section (requests and limits) to the container.
+# Everything else (probes, image, volumes) is identical.
+#
+# WHY RESOURCES ARE REQUIRED FOR HPA:
+# HPA calculates CPU usage as a percentage of the request value.
+# Example: if cpu request=100m and current usage=50m → 50% usage.
+# Without a request value, HPA has no baseline to calculate
+# against and will refuse to scale.
+# ==============================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: project-4
+  labels:
+    project: project-4
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        tier: backend
+    spec:
+      containers:
+        - name: backend
+          image: node:18-alpine
+          command: ["node", "/app/server.js"]
+
+          ports:
+            - containerPort: 3000
+
+          # ==================================================
+          # RESOURCE REQUESTS AND LIMITS
+          #
+          # requests — guaranteed minimum, used by scheduler
+          #   cpu: 100m    = 0.1 CPU core reserved for this pod
+          #   memory: 128Mi = 128 Mebibytes reserved
+          #
+          # limits — hard ceiling, enforced by kubelet
+          #   cpu: 300m    = cannot use more than 0.3 CPU core
+          #                  (throttled if exceeded, not killed)
+          #   memory: 256Mi = cannot use more than 256Mi
+          #                  (OOMKilled and restarted if exceeded)
+          #
+          # RATIO: limits = 3x requests
+          # This gives the container room to burst under load
+          # (e.g. during HPA stress test) without being killed,
+          # while still protecting other pods on the same node.
+          # ==================================================
+          resources:
+            requests:
+              cpu: "100m"       # 100 millicores = 0.1 CPU core — minimum guaranteed
+              memory: "128Mi"   # 128 Mebibytes — minimum guaranteed
+            limits:
+              cpu: "300m"       # 300 millicores = 0.3 CPU core — hard ceiling
+              memory: "256Mi"   # 256 Mebibytes — hard ceiling (OOMKill if exceeded)
+
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+            timeoutSeconds: 3
+
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+            timeoutSeconds: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+            timeoutSeconds: 3
+
+          volumeMounts:
+            - name: app-code
+              mountPath: /app
+
+      volumes:
+        - name: app-code
+          configMap:
+            name: backend-code
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: project-4
+  labels:
+    project: project-4
+    tier: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
