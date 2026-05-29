@@ -10,6 +10,7 @@ Hands-on Kubernetes projects with increasing complexity.
 | 01 | [Static Website Deployment](./project-01-static-website/) | Pods, Deployments, ReplicaSets, NodePort Services, Label Selectors, Self-Healing, Scaling, Rolling Updates, Rollbacks, Resource Requests and Limits, Port-Forward |
 | 02 | [Multi-Tier Application](./project-2-multitier/) | Namespaces, ClusterIP Services, Kubernetes DNS, Nginx Reverse Proxy, ConfigMaps (Volume Mounts + Env Vars), Environment Variables, Multi-Tier Architecture, Load Balancing, Dependency Ordering, Rolling Restarts, Troubleshooting |
 | 03 | [Stateful Applications](./project-3-stateful-applications/) | Persistent Volumes, Persistent Volume Claims, Storage Classes, Dynamic Provisioning, StatefulSets, Headless Services, volumeClaimTemplates, Stable Pod Identity, Stable Pod DNS, Data Persistence, Kubernetes Secrets, Least-Privilege Database Users, Stateless vs Stateful Architecture |
+| 04 | [Observability and Resilience](./project-4-observability-resilience/) | Liveness Probes, Readiness Probes, Startup Probes, Probe Failure Simulations, Resource Requests and Limits, Metrics Server, kubectl top, HorizontalPodAutoscaler, CPU-Based Autoscaling, HPA Stress Test, HPA Scale-Down Stabilization, ConfigMap Live Reload, File vs Process Memory Distinction |
 
 
 ## Environment
@@ -20,8 +21,8 @@ Hands-on Kubernetes projects with increasing complexity.
 
 ## Git Workflow
 
-- Branch from main: `git checkout -b feature/<name>`
-- Conventional commits: `feat`, `docs`, `chore`
+- Branch from main: git checkout -b feature/name
+- Conventional commits: feat, docs, chore
 - Push feature branch → open PR → merge → sync main → delete branch
 
 
