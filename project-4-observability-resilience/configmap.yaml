@@ -1,0 +1,221 @@
+# ==============================================================
+# configmap.yaml (v3 — version bumped to 2.0.0 for reload demo)
+#
+# WHAT CHANGED FROM v2:
+# version field changed from '1.0.0' to '2.0.0' in the main
+# endpoint response. This gives us a clear visible signal to
+# prove the ConfigMap file updated inside the running container.
+#
+# WHY STORE APP CODE IN A CONFIGMAP?
+# In a real environment you'd build a Docker image with your code.
+# In Minikube learning, storing code in a ConfigMap and mounting
+# it as a file lets us iterate quickly without rebuilding images.
+# This is a valid pattern for simple scripts and config files.
+#
+# TWO CONFIGMAPS IN ONE FILE:
+# Kubernetes allows multiple resource definitions in a single
+# YAML file, separated by ---. This keeps related config together.
+# ==============================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-code
+  namespace: project-4
+  labels:
+    project: project-4
+    tier: backend
+data:
+  # -------------------------------------------------------
+  # server.js — the complete Node.js application (v3)
+  # This file will be mounted into the container at runtime.
+  #
+  # KEY ENDPOINTS:
+  #   GET /              → main app response (JSON)
+  #   GET /health/live   → liveness probe target
+  #   GET /health/ready  → readiness probe target
+  #   GET /toggleready   → flips isReady flag for readiness demo
+  #   GET /crash         → calls process.exit(1) for liveness demo
+  #   GET /load          → CPU burn endpoint for HPA stress test
+  # -------------------------------------------------------
+  server.js: |
+    const http = require('http');  // Built-in Node.js HTTP module — no npm install needed
+    const os = require('os');      // Built-in OS module — used to get hostname (pod name)
+
+    // APP STATE — we use this variable to simulate failures during probe demos
+    // When isReady = false, the readiness probe will fail intentionally
+    let isReady = true;
+
+    // SERVER — listens on port 3000 inside the container
+    const server = http.createServer((req, res) => {
+
+      // -------------------------------------------------
+      // LIVENESS endpoint: GET /health/live
+      // Kubernetes asks: "Is this process still alive?"
+      // We always return 200 here — if the process is dead,
+      // it won't respond at all, which also triggers a restart.
+      // In a real app you'd check: can we reach the database?
+      //                            is the event loop responding?
+      // -------------------------------------------------
+      if (req.url === '/health/live') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'alive', timestamp: new Date().toISOString() }));
+
+      // -------------------------------------------------
+      // READINESS endpoint: GET /health/ready
+      // Kubernetes asks: "Should I send traffic to this pod?"
+      // We check our isReady flag — this lets us simulate
+      // a pod that is alive but NOT ready to serve traffic.
+      // Kubernetes will remove it from Service endpoints until
+      // this returns 200 again.
+      // -------------------------------------------------
+      } else if (req.url === '/health/ready') {
+        if (isReady) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'ready', timestamp: new Date().toISOString() }));
+        } else {
+          // 503 Service Unavailable — tells Kubernetes: stop sending traffic here
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'not ready', timestamp: new Date().toISOString() }));
+        }
+
+      // -------------------------------------------------
+      // TOGGLE endpoint: GET /toggleready
+      // Flips the isReady flag so we can simulate readiness
+      // probe failures without restarting the container.
+      // This is our "chaos button" for the readiness probe demo.
+      // NOTE: When pod is 0/1 (removed from Service endpoints),
+      // use kubectl exec to call this directly on localhost —
+      // you cannot reach it through the Service when not ready.
+      // -------------------------------------------------
+      } else if (req.url === '/toggleready') {
+        isReady = !isReady;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ isReady: isReady, message: 'Readiness toggled' }));
+
+      // -------------------------------------------------
+      // CRASH endpoint: GET /crash
+      // Deliberately crashes the Node.js process.
+      //
+      // WHY THIS WORKS BETTER THAN kill -9 FROM OUTSIDE:
+      // process.exit(1) terminates from WITHIN the process.
+      // No signal interception by the container runtime.
+      // Kubernetes sees exit code 1 (abnormal) and restarts
+      // the container immediately per the restart policy.
+      //
+      // The 100ms setTimeout ensures the HTTP response is
+      // sent back to curl BEFORE the process exits — otherwise
+      // curl would get a connection reset with no response.
+      //
+      // This simulates real-world scenarios like:
+      //   - Unhandled promise rejection crashing Node.js
+      //   - Out of memory error
+      //   - Fatal startup error on reconnect
+      // -------------------------------------------------
+      } else if (req.url === '/crash') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ message: 'Crashing intentionally for liveness demo...' }));
+        // Send response first so curl gets confirmation, then exit
+        setTimeout(() => {
+          console.log('CRASH endpoint called — exiting with code 1');
+          process.exit(1);   // Exit code 1 = abnormal termination → Kubernetes restarts
+        }, 100);             // 100ms delay ensures the HTTP response is sent before crash
+
+      // -------------------------------------------------
+      // LOAD endpoint: GET /load
+      // Burns CPU for ~500ms by doing math in a tight loop.
+      // Used during the HPA stress test to drive CPU usage
+      // above our autoscaling threshold.
+      // -------------------------------------------------
+      } else if (req.url === '/load') {
+        const start = Date.now();
+        // Tight loop — keeps the CPU busy until 500ms has passed
+        while (Date.now() - start < 500) {
+          Math.sqrt(Math.random());  // Meaningless math — just burns cycles
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'load generated', duration: '500ms' }));
+
+      // -------------------------------------------------
+      // MAIN endpoint: GET /
+      // Returns app info — this is what Nginx proxies to
+      // the browser. Shows hostname so you can see which
+      // pod responded when multiple replicas are running.
+      //
+      // VERSION BUMPED TO 2.0.0 for ConfigMap reload demo.
+      // After kubectl apply, the file updates on disk inside
+      // the running container within 30-60 seconds.
+      // -------------------------------------------------
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          message: 'Hello from Project 4 Backend!',
+          hostname: os.hostname(),   // Pod name — changes with each replica
+          version: '2.0.0',          // CHANGED: 1.0.0 → 2.0.0 for reload demo
+          timestamp: new Date().toISOString()
+        }));
+      }
+    });
+
+    // Start listening — container port 3000
+    server.listen(3000, () => {
+      console.log('Backend server running on port 3000');
+      console.log('Endpoints: / | /health/live | /health/ready | /toggleready | /load | /crash');
+    });
+
+---
+# ==============================================================
+# Second ConfigMap — Nginx reverse proxy configuration
+# Nginx sits in front of Node.js and forwards requests to it.
+# This is the same reverse proxy pattern from Project 2.
+# ==============================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: project-4
+  labels:
+    project: project-4
+    tier: frontend
+data:
+  # -------------------------------------------------------
+  # nginx.conf — Nginx reverse proxy configuration
+  # Nginx listens on port 80 and proxies all requests to
+  # the backend service on port 3000.
+  #
+  # WHY A REVERSE PROXY?
+  # The browser talks to one address (Nginx on port 80).
+  # Nginx forwards to whichever backend pod is available.
+  # This decouples the frontend from backend pod identity.
+  # -------------------------------------------------------
+  nginx.conf: |
+    events {}                   # Required Nginx block — handles connection settings
+
+    http {
+      server {
+        listen 80;              # Nginx listens on port 80 inside the container
+
+        location / {
+          # proxy_pass forwards all requests to the backend ClusterIP service
+          # "backend-service" resolves via Kubernetes DNS (same namespace)
+          proxy_pass http://backend-service:3000;
+
+          # Pass original headers through so Node.js sees the real client info
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+        }
+
+        # -------------------------------------------------
+        # Nginx liveness probe endpoint
+        # Returns 200 directly from Nginx (no backend call).
+        # WHY SEPARATE? Nginx could be healthy even if backend
+        # is down — and we want Kubernetes to know Nginx itself
+        # is alive, independently of the backend.
+        # -------------------------------------------------
+        location /nginx-health {
+          return 200 'nginx alive';
+          add_header Content-Type text/plain;
+        }
+      }
+    }
