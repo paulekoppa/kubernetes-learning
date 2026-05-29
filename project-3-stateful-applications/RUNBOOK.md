@@ -449,5 +449,5 @@ git branch -d feature/project-3-stateful-applications
 | Least privilege | App connects as `appuser`, not root |
 | Persistence proof | Pod age resets on recreation, PVC age does not |
 
-> **Note:** Runbook authored during Kubernetes hands-on learning — Project 2 of series.
+> **Note:** Runbook authored during Kubernetes hands-on learning — Project 3 of series.
 > Environment: Minikube on RHEL 9.6 | Access: Windows VDI → MobaXterm → RHEL sandbox
