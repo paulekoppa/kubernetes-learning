@@ -1,0 +1,18 @@
+# ==============================================================
+# namespace.yaml
+# Creates an isolated Kubernetes namespace for Project 4.
+#
+# WHY NAMESPACES?
+# A namespace is a virtual partition inside your cluster.
+# It lets you group related resources, apply policies per team
+# or project, and clean up everything with one delete command.
+# All Project 4 resources will declare "namespace: project-4".
+# ==============================================================
+
+apiVersion: v1          # Core Kubernetes API group
+kind: Namespace         # Resource type: Namespace
+metadata:
+  name: project-4       # The namespace name — used in all other YAML files
+  labels:
+    project: project-4  # Label for easy filtering with kubectl -l project=project-4
+    purpose: observability-resilience  # Documents what this namespace is for

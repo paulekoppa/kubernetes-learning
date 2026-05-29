@@ -1,0 +1,121 @@
+# ==============================================================
+# frontend-deployment.yaml (v3 — with Probes + Resources)
+#
+# WHAT CHANGED FROM v2:
+# Added resources section (requests and limits) to the container.
+# Everything else (probes, image, volumes) is identical.
+#
+# WHY NGINX GETS LESS THAN THE BACKEND:
+# Nginx is a reverse proxy — it passes requests through.
+# It does very little computation compared to Node.js.
+# Giving it smaller requests/limits is accurate and efficient —
+# it leaves more cluster resources available for the backend
+# which actually does the work.
+# ==============================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: project-4
+  labels:
+    project: project-4
+    tier: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        tier: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: nginx:alpine
+
+          ports:
+            - containerPort: 80
+
+          # ==================================================
+          # RESOURCE REQUESTS AND LIMITS
+          #
+          # requests — guaranteed minimum, used by scheduler
+          #   cpu: 50m     = 0.05 CPU core — Nginx is mostly I/O
+          #   memory: 64Mi = 64 Mebibytes — Nginx is very lean
+          #
+          # limits — hard ceiling, enforced by kubelet
+          #   cpu: 150m    = 0.15 CPU core maximum
+          #   memory: 128Mi = 128 Mebibytes maximum
+          #
+          # Nginx Alpine typically uses <5MB memory at rest
+          # and <10m CPU for light traffic — these limits are
+          # generous for our learning environment.
+          # ==================================================
+          resources:
+            requests:
+              cpu: "50m"        # 50 millicores = 0.05 CPU core — Nginx is I/O bound
+              memory: "64Mi"    # 64 Mebibytes — Nginx is very memory efficient
+            limits:
+              cpu: "150m"       # 150 millicores = 0.15 CPU core — hard ceiling
+              memory: "128Mi"   # 128 Mebibytes — hard ceiling
+
+          startupProbe:
+            httpGet:
+              path: /nginx-health
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 6
+            timeoutSeconds: 3
+
+          livenessProbe:
+            httpGet:
+              path: /nginx-health
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 15
+            failureThreshold: 3
+            successThreshold: 1
+            timeoutSeconds: 3
+
+          readinessProbe:
+            httpGet:
+              path: /nginx-health
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+            timeoutSeconds: 3
+
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: project-4
+  labels:
+    project: project-4
+    tier: frontend
+spec:
+  type: NodePort
+  selector:
+    app: frontend
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30400
+      protocol: TCP
