@@ -269,7 +269,7 @@ openssl req -x509 -nodes -days 365 \
   -newkey rsa:2048 \
   -keyout tls.key \
   -out tls.crt \
-  -subj "/CN=project5.local/O=Roche-Learning"
+  -subj "/CN=project5.local/O=Kubernetes-Learning"
 ```
 
 Verify the certificate:
@@ -281,9 +281,9 @@ openssl x509 -in tls.crt -text -noout | grep -E "Subject:|Not After|Issuer:"
 Expected output:
 
 ```text
-Issuer: CN=project5.local, O=Roche-Learning
+Issuer: CN=project5.local, O=Kubernetes-Learning
 Not After : <date 365 days from generation>
-Subject: CN=project5.local, O=Roche-Learning
+Subject: CN=project5.local, O=Kubernetes-Learning
 ```
 
 ### Self-signed vs CA-signed certificates
