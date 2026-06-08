@@ -1,0 +1,7 @@
+# TLS private key — never commit private keys to version control
+# Anyone with this file can impersonate your server
+tls.key
+
+# TLS certificate — safe to commit but excluded here for cleanliness
+# In real projects the cert would be managed by cert-manager or Vault
+tls.crt

@@ -1,0 +1,49 @@
+# NetworkPolicy: allow-backend
+# Defines the exact traffic permissions for backend pods
+#
+# Ingress rule:  allows the Nginx Ingress Controller to reach backend pods on port 80
+# Egress rule:   allows backend pods to query kube-dns for service name resolution
+#
+# Note: backend pods do NOT have a rule allowing frontend pods to reach them directly
+# All legitimate traffic arrives via the Ingress Controller only
+# Everything else remains blocked by the default-deny-all policy from Step 9
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend
+  namespace: project-5
+  labels:
+    project: project-5
+spec:
+  # This policy applies only to pods with the label app=backend
+  podSelector:
+    matchLabels:
+      app: backend
+  policyTypes:
+  - Ingress   # we are defining who can send traffic TO backend pods
+  - Egress    # we are defining where backend pods can send traffic TO
+  ingress:
+    # Allow traffic from the Nginx Ingress Controller namespace only
+    # Same pattern as the frontend policy — only the Ingress Controller
+    # should be sending traffic directly to backend pods
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 80   # backend nginx listens on port 80
+  egress:
+    # Allow DNS queries to kube-dns so backend pods can resolve service names
+    # Same DNS egress rule as the frontend policy
+    # Required even if the backend does not make outbound calls today —
+    # any future feature that uses a service name will need DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53   # DNS over UDP (standard)
+    - protocol: TCP
+      port: 53   # DNS over TCP (fallback for large responses)

@@ -1,0 +1,58 @@
+# Ingress: defines HTTPS routing rules for the Nginx Ingress Controller
+# This version adds TLS termination on top of the path-based routing from Step 3
+#
+# Traffic flow (HTTPS):
+#   Browser ──HTTPS──► Ingress Controller ──HTTP──► frontend-service (path: /)
+#   Browser ──HTTPS──► Ingress Controller ──HTTP──► backend-service  (path: /api)
+#
+# TLS termination happens at the Ingress Controller edge
+# Backend pods only ever see plain HTTP internally — they need no cert configuration
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: project5-ingress
+  namespace: project-5
+  labels:
+    project: project-5
+  annotations:
+    # Rewrite the request path before forwarding to the backend service
+    # /api becomes / before hitting the backend pod's nginx web root
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    # Force all HTTP traffic to redirect to HTTPS automatically
+    # Without this, plain HTTP would still work alongside HTTPS
+    # With this, HTTP requests get a 308 Permanent Redirect to HTTPS
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  # ingressClassName: tells Kubernetes which Ingress Controller handles this resource
+  ingressClassName: nginx
+  # tls block: wires the TLS certificate Secret to the hostname
+  # The Ingress Controller reads tls.crt and tls.key from the Secret
+  # and presents them during the HTTPS handshake with the browser
+  tls:
+  - hosts:
+    - project5.local          # must match the host in the rules block below
+    secretName: project5-tls  # must match the Secret name created in Step 6
+  rules:
+    # The hostname that this Ingress responds to
+    # Must match the hostname in the tls.hosts list above
+  - host: project5.local
+    http:
+      paths:
+        # Rule 1: root path "/" routes to the frontend service
+        # Prefix means "/" also matches "/about", "/contact", etc.
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service   # must match the Service name from Step 2
+            port:
+              number: 80
+        # Rule 2: "/api" path routes to the backend service
+        # Prefix means "/api" also matches "/api/users", "/api/health", etc.
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service    # must match the Service name from Step 2
+            port:
+              number: 80

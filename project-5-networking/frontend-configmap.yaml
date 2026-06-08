@@ -1,0 +1,19 @@
+# ConfigMap: injects a custom index.html into the frontend Nginx pod
+# The frontend represents the "/" path in our Ingress routing rules
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: project-5
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+      <head><title>Project 5 - Frontend</title></head>
+      <body>
+        <h1>Welcome to the Frontend</h1>
+        <p>You reached this page via the Ingress Controller.</p>
+        <p>Path: /</p>
+        <p>Tier: Frontend</p>
+      </body>
+    </html>
