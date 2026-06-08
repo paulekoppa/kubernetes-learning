@@ -1,0 +1,62 @@
+# Deployment: runs 2 backend Nginx pods
+# Each pod mounts the backend-config ConfigMap as its web root index.html
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: project-5
+  labels:
+    app: backend
+    project: project-5
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        project: project-5
+    spec:
+      containers:
+      - name: backend
+        image: nginx:1.25-alpine
+        ports:
+        - containerPort: 80
+        # Mount the ConfigMap into the nginx web root directory
+        volumeMounts:
+        - name: backend-content
+          mountPath: /usr/share/nginx/html
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "128Mi"
+      volumes:
+      # Reference the backend-config ConfigMap as a volume
+      - name: backend-content
+        configMap:
+          name: backend-config
+---
+# Service: ClusterIP exposes the backend pods internally
+# The Ingress Controller will route "/api" traffic to this service
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: project-5
+  labels:
+    app: backend
+    project: project-5
+spec:
+  selector:
+    app: backend
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  # ClusterIP is intentional — Ingress handles all external traffic
+  type: ClusterIP

@@ -1,0 +1,30 @@
+# NetworkPolicy: default-deny-all
+# This is the security baseline for the project-5 namespace
+#
+# How it works:
+#   - podSelector: {} with no matchLabels means it applies to ALL pods in the namespace
+#   - policyTypes lists Ingress and Egress but provides NO rules for either
+#   - No rules = no traffic allowed = everything is blocked by default
+#
+# This policy alone will break the application — that is intentional
+# We layer targeted allow policies on top in Step 10 to re-open only what is needed
+#
+# Think of this as: "deny everything, then selectively allow"
+# This is a whitelist security model — the production standard
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: project-5
+  labels:
+    project: project-5
+spec:
+  # Empty podSelector means this policy applies to ALL pods in the namespace
+  # If you wanted to target only specific pods you would add matchLabels here
+  podSelector: {}
+  # Declaring both Ingress and Egress with no rules blocks all traffic in both directions
+  policyTypes:
+  - Ingress   # controls traffic coming INTO pods
+  - Egress    # controls traffic going OUT OF pods
+  # Intentionally no ingress: or egress: rules defined here
+  # That is what makes this a deny-all policy

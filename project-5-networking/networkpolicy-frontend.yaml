@@ -1,0 +1,48 @@
+# NetworkPolicy: allow-frontend
+# Defines the exact traffic permissions for frontend pods
+#
+# Ingress rule:  allows the Nginx Ingress Controller to reach frontend pods on port 80
+# Egress rule:   allows frontend pods to query kube-dns for service name resolution
+#
+# Everything else remains blocked by the default-deny-all policy from Step 9
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend
+  namespace: project-5
+  labels:
+    project: project-5
+spec:
+  # This policy applies only to pods with the label app=frontend
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes:
+  - Ingress   # we are defining who can send traffic TO frontend pods
+  - Egress    # we are defining where frontend pods can send traffic TO
+  ingress:
+    # Allow traffic from the Nginx Ingress Controller namespace only
+    # namespaceSelector selects the entire ingress-nginx namespace
+    # This means any pod in ingress-nginx can reach frontend pods on port 80
+    # kubernetes.io/metadata.name is auto-applied to every namespace by Kubernetes
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 80   # frontend nginx listens on port 80
+  egress:
+    # Allow DNS queries to kube-dns so frontend pods can resolve service names
+    # Without this, any hostname lookup (wget backend-service) fails immediately
+    # kube-dns lives in the kube-system namespace on port 53
+    # Both UDP and TCP are required — DNS uses UDP by default but falls back to TCP
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53   # DNS over UDP (standard)
+    - protocol: TCP
+      port: 53   # DNS over TCP (fallback for large responses)

@@ -1,0 +1,18 @@
+# ConfigMap: injects a custom index.html into the backend Nginx pod
+# The backend represents the "/api" path in our Ingress routing rules
+# Nginx serves this as plain text - we format it to look like a JSON API response
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: project-5
+data:
+  index.html: |
+    {
+      "service": "backend-api",
+      "status": "healthy",
+      "message": "You reached this page via the Ingress Controller.",
+      "path": "/api",
+      "tier": "backend",
+      "project": "project-5"
+    }
