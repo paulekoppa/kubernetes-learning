@@ -1,0 +1,11 @@
+# namespace.yaml
+# Dedicated namespace for Project 6 - RBAC, ServiceAccounts, and Security Contexts.
+# Keeping this isolated from project-4 lets us demonstrate namespace-scoped RBAC
+# (Roles and RoleBindings only apply within a single namespace) without any
+# interference from earlier projects.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: project-6
+  labels:
+    project: project-6-rbac-security
