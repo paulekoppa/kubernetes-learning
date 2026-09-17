@@ -1,0 +1,21 @@
+# pod-lister-pod.yaml
+#
+# This pod explicitly uses the pod-lister-sa ServiceAccount instead of
+# "default". Kubernetes will automatically mount that ServiceAccount's
+# token into the container at the well-known path we saw earlier:
+#   /var/run/secrets/kubernetes.io/serviceaccount/
+#
+# We use curlimages/curl because it is a small image that already
+# includes curl, which we need to manually call the Kubernetes API
+# from inside the container to prove the RBAC chain works end-to-end.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-lister-demo
+  namespace: project-6
+spec:
+  serviceAccountName: pod-lister-sa    # <-- this is the key line
+  containers:
+    - name: curl-container
+      image: curlimages/curl:latest
+      command: ["sleep", "3600"]       # keep the container alive so we can exec into it
