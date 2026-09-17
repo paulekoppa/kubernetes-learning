@@ -1,0 +1,18 @@
+# rolebinding.yaml
+#
+# A RoleBinding connects a Role (the "what") to a subject (the "who").
+# Without this binding, the Role exists but grants nothing to anyone -
+# Roles are inert on their own, just like a Linux group with no members.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pod-lister-binding
+  namespace: project-6
+subjects:
+  - kind: ServiceAccount
+    name: pod-lister-sa
+    namespace: project-6
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io

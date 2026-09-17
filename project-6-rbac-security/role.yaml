@@ -1,0 +1,23 @@
+# role.yaml
+#
+# A Role defines a set of permissions WITHIN a single namespace.
+# (A ClusterRole would be the cluster-wide equivalent - we are not
+# using that here because this pod only ever needs to see pods
+# inside project-6, nothing outside it.)
+#
+# We are deliberately granting the minimum verbs needed:
+#   get   - retrieve a single pod's details
+#   list  - retrieve the collection of pods
+#   watch - subscribe to live changes (used by tools that "follow" pod status)
+#
+# We are NOT granting create, update, patch, or delete - this identity
+# should never be able to modify anything, only observe pods.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-reader
+  namespace: project-6
+rules:
+  - apiGroups: [""]        # "" means the core API group, where Pod lives
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
