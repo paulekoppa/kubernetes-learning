@@ -1,0 +1,20 @@
+# webserver-hardened-podlevel.yaml
+#
+# This pod uses the plain "default" ServiceAccount - the same one every
+# pod in Projects 1 through 5 has used - but overrides the automount
+# behaviour directly at the pod level.
+#
+# This demonstrates that automountServiceAccountToken can be set in two
+# places: on the ServiceAccount (affecting every pod that uses it), or
+# directly on a Pod spec (affecting just that one pod). A setting on the
+# Pod always takes precedence over the ServiceAccount's setting.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: webserver-hardened-podlevel
+  namespace: project-6
+spec:
+  automountServiceAccountToken: false   # overrides default behaviour, no dedicated SA needed
+  containers:
+    - name: nginx
+      image: nginx:alpine
