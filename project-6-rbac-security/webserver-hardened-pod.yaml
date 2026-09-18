@@ -1,0 +1,19 @@
+# webserver-hardened-pod.yaml
+#
+# A plain nginx pod, functionally identical to what you deployed in
+# Project 1 and Project 2, except this time it explicitly uses the
+# no-api-access-sa ServiceAccount.
+#
+# Because that ServiceAccount has automountServiceAccountToken: false,
+# this pod will NOT have a Kubernetes API token mounted inside it -
+# even though every pod so far in this course has had one by default.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: webserver-hardened
+  namespace: project-6
+spec:
+  serviceAccountName: no-api-access-sa
+  containers:
+    - name: nginx
+      image: nginx:alpine
