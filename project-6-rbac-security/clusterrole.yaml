@@ -1,0 +1,18 @@
+# clusterrole.yaml
+#
+# ClusterRoles define permissions just like a Role, but they are not
+# scoped to a single namespace. This makes them the only option when
+# granting access to cluster-scoped resources, such as nodes, which
+# do not belong to any namespace at all.
+#
+# Here we grant read-only visibility into cluster Nodes - useful for a
+# monitoring tool that needs to report on node capacity or health,
+# but should never be able to modify anything.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: node-reader
+rules:
+  - apiGroups: [""]         # core API group, where Node lives
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
