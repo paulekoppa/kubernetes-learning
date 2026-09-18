@@ -1,0 +1,22 @@
+# clusterrolebinding.yaml
+#
+# A ClusterRoleBinding grants the permissions in a ClusterRole across
+# the ENTIRE cluster, not just one namespace. This is the correct choice
+# here because "nodes" is a cluster-scoped resource - there is no such
+# thing as "nodes in project-6", nodes belong to the whole cluster.
+#
+# Note the subject ServiceAccount still lives in a specific namespace
+# (project-6) - only the PERMISSION granted is cluster-wide, not the
+# identity itself.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: node-reader-binding
+subjects:
+  - kind: ServiceAccount
+    name: node-reader-sa
+    namespace: project-6
+roleRef:
+  kind: ClusterRole
+  name: node-reader
+  apiGroup: rbac.authorization.k8s.io

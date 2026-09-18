@@ -1,0 +1,18 @@
+# node-reader-pod.yaml
+#
+# This pod uses the node-reader-sa ServiceAccount, which is bound to a
+# ClusterRole via a ClusterRoleBinding. Unlike pod-lister-demo in Step 6
+# (which could only ever see pods within project-6), this pod's token
+# will be authorized against a cluster-scoped resource - nodes - which
+# by definition exist outside any single namespace.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: node-reader-demo
+  namespace: project-6
+spec:
+  serviceAccountName: node-reader-sa
+  containers:
+    - name: curl-container
+      image: curlimages/curl:latest
+      command: ["sleep", "3600"]
